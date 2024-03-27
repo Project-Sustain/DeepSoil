@@ -22,21 +22,17 @@ mem_per_cpu_step = 5
 gpu_size = 80
 
 
-def main(start_index: int, email: str, username: str):
-    recurse(start_index, email, username, mem_per_cpu_max)
-
-
 '''
-Recursive function so that we can re-try if we get a stalled, cancelled, failed, or pending job status
+Main is a recursive function so that we can re-try if we get a stalled, cancelled, failed, or pending job status
 '''
 
 
-def recurse(start_index: int, email: str, username: str, current_mem_per_cpu: int):
+def main(start_index: int, email: str, username: str, current_mem_per_cpu: int):
     new_job_id = run_job(start_index, email, username, current_mem_per_cpu)  # Run our job, get its id
     sleep(15)  # Wait for job status to update
     error = check_for_error_code(new_job_id)  # Check for an error code
     if error:  # If we find an error code, handle it
-        handle_error(current_mem_per_cpu, new_job_id)
+        handle_error(current_mem_per_cpu, new_job_id)  # This is where our recursive call lives
     else:
         print(f"No error code found. Job should be running.")
 
@@ -97,7 +93,7 @@ def handle_error(current_mem_per_cpu: int, new_job_id: int):
         subprocess.run(["skill", new_job_id])  # Kill the job
         sleep(3)
         print(f"Found error code, retrying with {current_mem_per_cpu}G mem_per_cpu")
-        recurse(start_index, email, username, current_mem_per_cpu)  # Try again
+        main(start_index, email, username, current_mem_per_cpu)  # Try again
     else:  # If we've breached the lower bound, abort the program
         print("Reached minimum memory requirement. Aborting.")
         exit(1)
@@ -183,4 +179,4 @@ if __name__ == "__main__":
     start_index = int(sys.argv[1])
     email = sys.argv[2]
     username = sys.argv[3]
-    main(start_index, email, username)
+    main(start_index, email, username, mem_per_cpu_max)
