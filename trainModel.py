@@ -35,7 +35,7 @@ def recurse(start_index: int, email: str, username: str, current_mem_per_cpu: in
     new_job_id = run_job(start_index, email, username, current_mem_per_cpu)  # Run our job, get its id
     sleep(15)  # Wait for job status to update
     error = check_for_error_code(new_job_id)  # Check for an error code
-    if error:  # If we find an error code, try to decrement our memory per cpu and recurse
+    if error:  # If we find an error code, handle it
         handle_error(current_mem_per_cpu, new_job_id)
     else:
         print(f"No error code found. Job should be running.")
@@ -92,13 +92,13 @@ Decrements current_mem_per_cpu, checks if we're at the memory floor, and does re
 
 
 def handle_error(current_mem_per_cpu: int, new_job_id: int):
-    current_mem_per_cpu -= mem_per_cpu_step
-    if current_mem_per_cpu >= mem_per_cpu_min:
+    current_mem_per_cpu -= mem_per_cpu_step  # Decrement the current memory per cpu
+    if current_mem_per_cpu >= mem_per_cpu_min:  # If we're still at/above our floor, carry on
         subprocess.run(["skill", new_job_id])  # Kill the job
         sleep(3)
         print(f"Found error code, retrying with {current_mem_per_cpu}G mem_per_cpu")
-        recurse(start_index, email, username, current_mem_per_cpu)  # Decrement memory
-    else:  # If we've reached the lower bound, abort the program
+        recurse(start_index, email, username, current_mem_per_cpu)  # Try again
+    else:  # If we've breached the lower bound, abort the program
         print("Reached minimum memory requirement. Aborting.")
         exit(1)
 
@@ -125,7 +125,7 @@ This is a helper for finding the relevant job id
 
 
 def get_job_id_set(username: str):
-    run_squeue()
+    run_squeue()  # Run the squeue command, write the output to a file
     sleep(3)
     all_ids = []
     with open(output_file, 'r') as f:  # Open the file we just wrote to
@@ -146,7 +146,7 @@ Runs the `squeue` command and writes the output to our output_file
 def run_squeue():
     output = subprocess.run(["squeue"], stdout=subprocess.PIPE).stdout.decode("utf-8")  # Run the squeue command
     with open(output_file, "w") as f:
-        f.write(output)  # Write the output of squeue to a file
+        f.write(output)  # Write the output of squeue to the output file
 
 
 '''
