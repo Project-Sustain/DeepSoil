@@ -36,7 +36,7 @@ def recurse(start_index: int, email: str, username: str, current_mem_per_cpu: in
     if new_job_id == -1:  # Abort if we couldn't find out job id
         print("Failed to find job id")
         exit(1)
-    sleep(3)
+    sleep(15)  # Wait for job status to update
     error = check_for_error_code(new_job_id)  # Check for an error code
     if error:  # If we find an error code, try to decrement our memory per cpu and recurse
         if current_mem_per_cpu >= mem_per_cpu_min:
@@ -128,7 +128,7 @@ def run_job(start_index: int, email: str, current_mem_per_cpu: int):
     with open("ds_model.sh", "w") as f:
         f.write(bash_file)  # Write the bash file out to a file
     subprocess.run(["ds_model.sh"])  # Run the bash file
-    sleep(3)
+    sleep(10)  # Wait for job to start
     new_ids = set(get_job_id_set(username))  # Get new job ids
     return get_id(ids, new_ids)  # Find the correct job id
 
