@@ -33,19 +33,12 @@ Recursive function so that we can re-try if we get a stalled, cancelled, failed,
 
 def recurse(start_index: int, email: str, username: str, current_mem_per_cpu: int):
     new_job_id = run_job(start_index, email, username, current_mem_per_cpu)  # Run our job, get its id
-    if new_job_id == -1:  # Abort if we couldn't find our job id
-        print("Failed to find job id")
-        exit(1)
     sleep(15)  # Wait for job status to update
     error = check_for_error_code(new_job_id)  # Check for an error code
     if error:  # If we find an error code, try to decrement our memory per cpu and recurse
-        if current_mem_per_cpu >= mem_per_cpu_min:
-            subprocess.run(["skill", new_job_id])  # Kill the job
-            sleep(3)
-            recurse(start_index, email, username, current_mem_per_cpu - mem_per_cpu_step)  # Decrement memory
-        else:  # If we've reached the lower bound, abort the program
-            print("Reached minimum memory requirement. Aborting.")
-            exit(1)
+        handle_error(current_mem_per_cpu, new_job_id)
+    else:
+        print(f"No error code found. Job should be running.")
 
 
 '''
@@ -64,7 +57,11 @@ def run_job(start_index: int, email: str, username: str, current_mem_per_cpu: in
     subprocess.run(["ds_model.sh"])  # Run the bash file
     sleep(10)  # Wait for job to start
     new_ids = set(get_job_id_set(username))  # Get new job ids
-    return get_id(ids, new_ids)  # Find the correct job id
+    new_job_id = get_id(ids, new_ids)  # Find the correct job id
+    if new_job_id == -1:  # Abort if we couldn't find our job id
+        print("Failed to find job id. Aborting.")
+        exit(1)
+    return new_job_id
 
 
 '''
@@ -85,6 +82,25 @@ def check_for_error_code(new_job_id: str):
                 if len(error_codes) > 0:  # If we find an error code, report by returning true
                     return True
     return False  # No error codes found
+
+
+'''
+current_mem_per_cpu: current cpu memory allocation
+new_job_id: id of relevant job
+Decrements current_mem_per_cpu, checks if we're at the memory floor, and does recursion
+'''
+
+
+def handle_error(current_mem_per_cpu: int, new_job_id: int):
+    current_mem_per_cpu -= mem_per_cpu_step
+    if current_mem_per_cpu >= mem_per_cpu_min:
+        subprocess.run(["skill", new_job_id])  # Kill the job
+        sleep(3)
+        print(f"Found error code, retrying with {current_mem_per_cpu}G mem_per_cpu")
+        recurse(start_index, email, username, current_mem_per_cpu)  # Decrement memory
+    else:  # If we've reached the lower bound, abort the program
+        print("Reached minimum memory requirement. Aborting.")
+        exit(1)
 
 
 '''
