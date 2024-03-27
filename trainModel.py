@@ -14,7 +14,7 @@ import subprocess
 from time import sleep
 import re
 
-output_file = "queueFile.txt"
+output_file = "squeueOutput.txt"
 
 mem_per_cpu_max = 30
 mem_per_cpu_min = 10
