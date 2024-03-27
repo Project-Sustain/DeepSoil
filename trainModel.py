@@ -32,8 +32,8 @@ Recursive function so that we can re-try if we get a stalled, cancelled, failed,
 
 
 def recurse(start_index: int, email: str, username: str, current_mem_per_cpu: int):
-    new_job_id = run_job(start_index, email, current_mem_per_cpu)  # Run our job, get its id
-    if new_job_id == -1:  # Abort if we couldn't find out job id
+    new_job_id = run_job(start_index, email, username, current_mem_per_cpu)  # Run our job, get its id
+    if new_job_id == -1:  # Abort if we couldn't find our job id
         print("Failed to find job id")
         exit(1)
     sleep(15)  # Wait for job status to update
@@ -49,17 +49,22 @@ def recurse(start_index: int, email: str, username: str, current_mem_per_cpu: in
 
 
 '''
-initial_set: this is a set() or all job id's before we started our new one
-second_set: this is a set() or all job id's after we started our new one
-Returns: the single job id that is present in second_set and absent in initial_set, -1 if no such id is found
+start_index: the index we're starting at
+email: the user's email
+current_mem_per_cpu: the current memory that we're building our bash script with
+Builds the bash script from parameters, writes it to a file, then runs it, returns id of new job
 '''
 
 
-def get_id(initial_set: set, second_set: set):
-    for item in second_set:  # Iterate second set
-        if item not in initial_set:  # Find first element from second set that's not in first set
-            return item  # Return it
-    return -1  # If we didn't find it, return -1
+def run_job(start_index: int, email: str, username: str, current_mem_per_cpu: int):
+    ids = set(get_job_id_set(username))  # Get all current job ids
+    bash_file = get_bash_string(start_index, email, username, current_mem_per_cpu)  # Get the bash file as a string
+    with open("ds_model.sh", "w") as f:
+        f.write(bash_file)  # Write the bash file out to a file
+    subprocess.run(["ds_model.sh"])  # Run the bash file
+    sleep(10)  # Wait for job to start
+    new_ids = set(get_job_id_set(username))  # Get new job ids
+    return get_id(ids, new_ids)  # Find the correct job id
 
 
 '''
@@ -80,6 +85,20 @@ def check_for_error_code(new_job_id: str):
                 if len(error_codes) > 0:  # If we find an error code, report by returning true
                     return True
     return False  # No error codes found
+
+
+'''
+initial_set: this is a set() or all job id's before we started our new one
+second_set: this is a set() or all job id's after we started our new one
+Returns: the single job id that is present in second_set and absent in initial_set, -1 if no such id is found
+'''
+
+
+def get_id(initial_set: set, second_set: set):
+    for item in second_set:  # Iterate second set
+        if item not in initial_set:  # Find first element from second set that's not in first set
+            return item  # Return it
+    return -1  # If we didn't find it, return -1
 
 
 '''
@@ -115,31 +134,12 @@ def run_squeue():
 
 
 '''
-start_index: the index we're starting at
-email: the user's email
-current_mem_per_cpu: the current memory that we're building our bash script with
-Builds the bash script from parameters, writes it to a file, then runs it, returns id of new job
-'''
-
-
-def run_job(start_index: int, email: str, current_mem_per_cpu: int):
-    ids = set(get_job_id_set(username))  # Get all current job ids
-    bash_file = get_bash_string(start_index, email, current_mem_per_cpu)  # Get the bash file as a string
-    with open("ds_model.sh", "w") as f:
-        f.write(bash_file)  # Write the bash file out to a file
-    subprocess.run(["ds_model.sh"])  # Run the bash file
-    sleep(10)  # Wait for job to start
-    new_ids = set(get_job_id_set(username))  # Get new job ids
-    return get_id(ids, new_ids)  # Find the correct job id
-
-
-'''
 Builds a bash file as a string from parameters
 '''
 
 
-def get_bash_string(start_index: int, email: str, current_mem_per_cpu: int):
-    logfile_name: str = f"log_{start_index}.out"
+def get_bash_string(start_index: int, email: str, username: str, current_mem_per_cpu: int):
+    logfile_name = f"log_{username}_{start_index}.out"
     return f'''#!/bin/bash
 #SBATCH --job-name="model_1"
 #SBATCH --partition=peregrine-gpu
