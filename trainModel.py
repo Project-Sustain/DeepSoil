@@ -1,5 +1,5 @@
 '''
-Falcon job codes from Paahuni
+Falcon job codes
 PD     Pending. Job is waiting for resource allocation
 R      Running. Job has an allocation and is running
 S      Suspended. Execution has been suspended and resources have been released for other jobs
@@ -11,8 +11,8 @@ F      Failed. Job has terminated with non-zero exit code or other failure condi
 
 import sys
 import subprocess
-from time import sleep
 import re
+from time import sleep
 
 output_file = "squeueOutput.txt"
 
