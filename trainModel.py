@@ -21,6 +21,8 @@ mem_per_cpu_max = 30
 mem_per_cpu_min = 10
 mem_per_cpu_step = 5
 
+SCRIPT_PATH = "/s/lovelace/f/nobackup/shrideep/sustain/everett/cl_3.8/deepSoil/models/sm_model_ev.py"
+
 
 class Machine:
     def __init__(self, name, gpu, partition):
@@ -211,7 +213,7 @@ def get_bash_string(start_index: int, email: str, username: str, current_mem_per
 #SBATCH --mail-type=end
 #SBATCH --mail-user={email}@colostate.edu
 #SBATCH --gres=gpu:{machine.gpu}:1
-srun python3 /s/lovelace/f/nobackup/shrideep/sustain/everett/cl_3.8/deepSoil/models/sm_model_ev.py {start_index}'''
+srun python3 {SCRIPT_PATH} {start_index}'''
 
 # source /s/lovelace/f/nobackup/shrideep/sustain/matt/cl_3.8/venv/bin/activate
 
