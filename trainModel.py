@@ -24,7 +24,7 @@ mem_per_cpu_step = 5
 SCRIPT_PATH = "/s/lovelace/f/nobackup/shrideep/sustain/everett/cl_3.8/deepSoil/models/sm_model_ev.py"
 
 
-class Machine:
+class Preset:
     def __init__(self, name, gpu, partition):
         self.name = name
         self.gpu = gpu
@@ -32,12 +32,12 @@ class Machine:
 
 
 machines = {}
-for machine in [
-    Machine("PEREGRINE-80","a100-sxm4-80gb","peregrine-gpu"),
-    Machine("PEREGRINE-40","nvidia_a100_3g.39gb","peregrine-gpu"),
-    Machine("KESTREL","3090","kestrel-gpu")
+for preset in [
+    Preset("PEREGRINE-80","a100-sxm4-80gb","peregrine-gpu"),
+    Preset("PEREGRINE-40","nvidia_a100_3g.39gb","peregrine-gpu"),
+    Preset("KESTREL","3090","kestrel-gpu")
 ]:
-    machines[machine.name] = machine
+    machines[preset.name] = preset
 
 
 '''
@@ -45,7 +45,7 @@ Main is a recursive function so that we can re-try if we get a stalled, cancelle
 '''
 
 
-def main(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Machine):
+def main(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Preset):
     run_squeue()
     print(f"Attempting to train on {machine.name} {machine.gpu} with {current_mem_per_cpu}gb CPU memory")
     new_job_id = run_job(start_index, email, username, current_mem_per_cpu, machine)  # Run our job, get its id
@@ -67,7 +67,7 @@ Builds the bash script from parameters, writes it to a file, then runs it, retur
 '''
 
 
-def run_job(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Machine):
+def run_job(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Preset):
     ids = set(get_job_id_set(username))  # Get all current job ids
     bash_file = get_bash_string(start_index, email, username, current_mem_per_cpu, machine)  # Get the bash file as a string
     print(f"Writing out generated bash script as .sh file...")
@@ -128,7 +128,7 @@ Decrements current_mem_per_cpu, checks if we're at the memory floor, and does re
 '''
 
 
-def handle_error(username:str, email:str, start_index:int, current_mem_per_cpu: int, new_job_id: int, machine: Machine):
+def handle_error(username:str, email:str, start_index:int, current_mem_per_cpu: int, new_job_id: int, machine: Preset):
     print(f"Handling error code...")
     current_mem_per_cpu -= mem_per_cpu_step  # Decrement the current memory per cpu
     if current_mem_per_cpu >= mem_per_cpu_min:  # If we're still at/above our floor, carry on
@@ -193,7 +193,7 @@ Builds a bash file as a string from parameters
 '''
 
 
-def get_bash_string(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Machine):
+def get_bash_string(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Preset):
     # ToDo update --cpus-per-task is we run into Resource issues. Start w/ 5, lower limit=1
     # ToDo reduce cpus-per-task FIRST upper bound=5, lower bound=1, THEN reduce mem-per-cpu
 
