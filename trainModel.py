@@ -209,8 +209,7 @@ def get_bash_string(start_index: int, email: str, username: str, current_mem_per
 #SBATCH --time=10-00:00:00
 #SBATCH --output={logfile_name}
 #SBATCH --error={logfile_name}
-#SBATCH --mail-type=begin
-#SBATCH --mail-type=end
+#SBATCH --mail-type=begin,end,fail
 #SBATCH --mail-user={email}@colostate.edu
 #SBATCH --gres=gpu:{machine.gpu}:1
 srun python3 {SCRIPT_PATH} {start_index}'''
