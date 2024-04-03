@@ -17,15 +17,25 @@ from time import sleep
 
 output_file = "squeueOutput.txt"
 
-mem_per_cpu_max = 50
+mem_per_cpu_max = 30
 mem_per_cpu_min = 10
 mem_per_cpu_step = 5
 
-machines = {
-    "PEREGRINE-80": "a100-sxm4-80gb",
-    "PEREGRINE-40": "nvidia_a100_3g.39gb",
-    "KESTREL": "3090"
-}
+
+class Machine:
+    def __init__(self, name, gpu, partition):
+        self.name = name
+        self.gpu = gpu
+        self.partition = partition
+
+
+machines = {}
+for machine in [
+    Machine("PEREGRINE-80","a100-sxm4-80gb","peregrine-gpu"),
+    Machine("PEREGRINE-40","nvidia_a100_3g.39gb","peregrine-gpu"),
+    Machine("KESTREL","3090","kestrel-gpu")
+]:
+    machines[machine.name] = machine
 
 
 '''
@@ -33,9 +43,9 @@ Main is a recursive function so that we can re-try if we get a stalled, cancelle
 '''
 
 
-def main(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: str):
+def main(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Machine):
     run_squeue()
-    print(f"Attempting to train on {machine} with {current_mem_per_cpu}gb CPU memory")
+    print(f"Attempting to train on {machine.name} {machine.gpu} with {current_mem_per_cpu}gb CPU memory")
     new_job_id = run_job(start_index, email, username, current_mem_per_cpu, machine)  # Run our job, get its id
     print(f"Waiting for job status to update...")
     sleep(15)  # Wait for job status to update
@@ -55,19 +65,28 @@ Builds the bash script from parameters, writes it to a file, then runs it, retur
 '''
 
 
-def run_job(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: str):
+def run_job(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Machine):
     ids = set(get_job_id_set(username))  # Get all current job ids
     bash_file = get_bash_string(start_index, email, username, current_mem_per_cpu, machine)  # Get the bash file as a string
     print(f"Writing out generated bash script as .sh file...")
-    with open("ds_model.sh", "w") as f:
+
+    current_working_directory = os.getcwd()
+    script_name = f"ds_model_{start_index}.sh"
+    script_path = f"{current_working_directory}/{script_name}"
+
+    with open(script_name, "w") as f:
         f.write(bash_file)  # Write the bash file out to a file
     current_working_directory = os.getcwd()
-    subprocess.run(["chmod", "u+x", f"{current_working_directory}/ds_model.sh"])
-    print(f"Running subprocess 'ds_model.sh'")
-    subprocess.run([f"{current_working_directory}/ds_model.sh"])  # Run the bash file
+
+    subprocess.run(["chmod", "u+x", script_path])
+
+    print(f"Submitting job for '{script_name}'")
+    subprocess.run(["sbatch", script_path])  # Run the bash file
+
     print(f"Waiting for job to start...")
     sleep(10)  # Wait for job to start
     print(f"Done waiting.")
+
     new_ids = set(get_job_id_set(username))  # Get new job ids
     new_job_id = get_id(ids, new_ids)  # Find the correct job id
     print(f"Found new job id: {new_job_id}")
@@ -92,9 +111,9 @@ def check_for_error_code(new_job_id: str):
         lines = f.readlines()  # Get all lines in file
         for line in lines:
             if new_job_id in line:  # Match the correct job id
-                error_codes = re.findall(r"\b(PD|CA|S|F)\b", line)  # Regex for error codes
-                if len(error_codes) > 0:  # If we find an error code, report by returning true
-                    print(f"Found error code")
+                match = re.search(r"\b(PD|CA|S|F)\b", line)  # Regex for error codes
+                if match is not None:  # If we find an error code, report by returning true
+                    print(f"Found error code {match.group(0)}")
                     return True
     print(f"No error code found")
     return False  # No error codes found
@@ -107,11 +126,12 @@ Decrements current_mem_per_cpu, checks if we're at the memory floor, and does re
 '''
 
 
-def handle_error(username:str, email:str, start_index:int, current_mem_per_cpu: int, new_job_id: int, machine:str):
-    prinf(f"Handling error code...")
+def handle_error(username:str, email:str, start_index:int, current_mem_per_cpu: int, new_job_id: int, machine: Machine):
+    print(f"Handling error code...")
     current_mem_per_cpu -= mem_per_cpu_step  # Decrement the current memory per cpu
     if current_mem_per_cpu >= mem_per_cpu_min:  # If we're still at/above our floor, carry on
-        subprocess.run(["skill", new_job_id])  # Kill the job
+        # subprocess.run(["skill", new_job_id])  # Kill the job
+        subprocess.run(["scancel", new_job_id])
         sleep(3)
         print(f"Found error code, retrying with {current_mem_per_cpu}G mem_per_cpu")
         main(start_index, email, username, current_mem_per_cpu, machine)  # Try again
@@ -171,14 +191,14 @@ Builds a bash file as a string from parameters
 '''
 
 
-def get_bash_string(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: str):
+def get_bash_string(start_index: int, email: str, username: str, current_mem_per_cpu: int, machine: Machine):
     # ToDo update --cpus-per-task is we run into Resource issues. Start w/ 5, lower limit=1
     # ToDo reduce cpus-per-task FIRST upper bound=5, lower bound=1, THEN reduce mem-per-cpu
 
     logfile_name = f"log_{username}_{start_index}.out"
     return f'''#!/bin/bash
 #SBATCH --job-name="model_1"
-#SBATCH --partition=peregrine-gpu
+#SBATCH --partition={machine.partition}
 #SBATCH --qos=gpu_long
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -189,9 +209,9 @@ def get_bash_string(start_index: int, email: str, username: str, current_mem_per
 #SBATCH --error={logfile_name}
 #SBATCH --mail-type=begin
 #SBATCH --mail-type=end
-#SBATCH --mail-user=<{email}>@colostate.edu
-#SBATCH --gres=gpu:{machine}:1
-srun python3 /s/lovelace/f/nobackup/shrideep/sustain/matt/cl_3.8/deepSoil/models/sm_model_ev.py {start_index}'''
+#SBATCH --mail-user={email}@colostate.edu
+#SBATCH --gres=gpu:{machine.gpu}:1
+srun python3 /s/lovelace/f/nobackup/shrideep/sustain/everett/cl_3.8/deepSoil/models/sm_model_ev.py {start_index}'''
 
 # source /s/lovelace/f/nobackup/shrideep/sustain/matt/cl_3.8/venv/bin/activate
 
