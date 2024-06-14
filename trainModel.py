@@ -199,7 +199,7 @@ def get_bash_string(start_index: int, email: str, username: str, current_mem_per
 
     logfile_name = f"log_{username}_{start_index}.out"
     return f'''#!/bin/bash
-#SBATCH --job-name="model_1"
+#SBATCH --job-name="model_{start_index}"
 #SBATCH --partition={machine.partition}
 #SBATCH --qos=gpu_long
 #SBATCH --nodes=1
