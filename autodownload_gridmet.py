@@ -2,7 +2,7 @@ import subprocess
 import socket
 import gdal
 import numpy as np
-import mercantile,fiona
+import mercantile, fiona
 import rasterio as rio
 from rasterio import mask as msk
 import random
@@ -13,17 +13,25 @@ import shutil
 import pickle
 import datetime
 
+ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/gridmet"
+os.makedirs(ROOT_PATH, exist_ok=True)
+
+
 def download_nc_file():
+    os.makedirs(ROOT_PATH + "/raw", exist_ok=True)
     year = datetime.datetime.now().year
     print(subprocess.run(["./download_daily_gridmet.sh " + str(year)], shell=True))
-    print(subprocess.run(["mv *_{}.nc /s/{}/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/raw/".format(year, socket.gethostname())], shell=True))
+    print(subprocess.run(["mv *_{}.nc {}/raw/".format(year, ROOT_PATH)], shell=True))
+    convert_to_tif()
+
 
 def day_of_year_to_date(day_of_year, year):
-     date = datetime.date.fromordinal(datetime.date(year, 1, 1).toordinal() + day_of_year - 1)
-     return date.strftime('%Y%m%d')
+    date = datetime.date.fromordinal(datetime.date(year, 1, 1).toordinal() + day_of_year - 1)
+    return date.strftime('%Y%m%d')
+
 
 def convert_to_tif():
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/raw/"
+    in_path = ROOT_PATH + "/raw/"
     for f in os.listdir(in_path):
         if not f.endswith('.nc'):
             continue
@@ -51,15 +59,17 @@ def convert_to_tif():
 
         print("Converted ", f)
         os.remove(in_path + f)
+    merge_bands_gridmet()
 
 def merge_bands_gridmet():
     year = str(datetime.datetime.now().year)
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/raw/"
-    out_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/merged/"
+    in_path = ROOT_PATH + "/raw/"
+    out_path = ROOT_PATH + "/merged/"
+
+    os.makedirs(out_path, exist_ok=True)
 
     etr = gdal.Open(in_path + 'etr_' + year + ".tif").ReadAsArray()
     etr[etr != 32767.0] = etr[etr != 32767.0] * 0.1
-    # etr = np.swapaxes(np.swapaxes(etr, 0, 1), 1, 2)
 
     pet = gdal.Open(in_path + 'pet_' + year + ".tif").ReadAsArray()
     pet[pet != 32767.0] = pet[pet != 32767.0] * 0.1
@@ -111,8 +121,9 @@ def merge_bands_gridmet():
     dst_ds.GetRasterBand(9).WriteArray(vpd)
     ds = None
 
+
 def remove_empty_folders():
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/split_14/"
+    in_path = ROOT_PATH + "/split_14/"
     tot = len(os.listdir(in_path))
     count = 0
     for q in os.listdir(in_path):
@@ -120,15 +131,15 @@ def remove_empty_folders():
             print("No files in :", q)
             count += 1
             os.rmdir(in_path + q)
-    print(count,"/",tot)
+    print(count, "/", tot)
+
 
 def transfer_tifs_to_all_machines():
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/merged/"
+    in_path = ROOT_PATH + "/merged/"
     for send_to_lattice in range(176, 224):
         if send_to_lattice == int(socket.gethostname().split("-")[1]):
             continue
-        out_path = "/s/lattice-" + str(send_to_lattice) + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/merged/"
-
+        out_path = ROOT_PATH.replace(socket.gethostname(), "lattice-" + str(send_to_lattice)) + "/merged/"
         for file_name in os.listdir(in_path):
             source_file = os.path.join(in_path, file_name)
             command = ['scp', source_file, 'paahuni@lattice-' + str(send_to_lattice) + ":" + out_path]
@@ -136,33 +147,39 @@ def transfer_tifs_to_all_machines():
 
         print("Sent to lattice-", send_to_lattice)
 
+
 def chop_in_quadhash():
+    # Assuming quadhashes shape files are already available on the machine
     quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_12_"))
     quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
 
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/merged/"
-    out_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/gridmet/split_14/"
+    in_path = ROOT_PATH + "/merged/"
+    out_path = ROOT_PATH + "/split_14/"
+    os.makedirs(out_path, exist_ok=True)
 
     count = 0
     total = len(quadhashes)
     for ind, row in quadhashes.iterrows():
-        count+=1
-        print("processing:  ", count, "/", total)
-        poly,qua = row["geometry"], row["Quadkey"]
+        count += 1
+        print("Processing:  ", count, "/", total)
+        poly, qua = row["geometry"], row["Quadkey"]
         os.makedirs(out_path + qua, exist_ok=True)
         bounds = list(poly.exterior.coords)
         window = (bounds[0][0], bounds[0][1], bounds[2][0], bounds[2][1])
 
         for f in os.listdir(in_path):
-            gdal.Translate(out_path + qua + '/' + f,  in_path + f, projWin=window)
+            gdal.Translate(out_path + qua + '/' + f, in_path + f, projWin=window)
 
             x = gdal.Open(out_path + qua + '/' + f).ReadAsArray()
             if np.min(x[0]) == np.max(x[0]) == 32767.0:
                 os.remove(out_path + qua + '/' + f)
+
     remove_empty_folders()
+    for f in os.listdir(in_path):
+        os.remove(in_path + f)
 
 if __name__ == '__main__':
     download_nc_file()
-    convert_to_tif()
-    merge_bands_gridmet()
+    # Uncomment below line if you are downloading data on one machine and transferring merged file to remaining machines
+    # transfer_tifs_to_all_machines()
     chop_in_quadhash()
