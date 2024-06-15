@@ -27,9 +27,11 @@ os.makedirs(ROOT_PATH, exist_ok=True)
     Downloads SMAP Soil moisture from 2 days back in .h5 format
     The download path changes every year (majorly the product version of the product)
 '''
-def download_smap_automatically(n_days_before=2):
-    current_date = datetime.now()
-    year, month, day = (current_date - timedelta(n_days_before)).strftime("%Y-%m-%d").split("-")
+def download_smap_automatically(year=None, month=None, day=None, n_days_before=2):
+    if year is None or month is None or day is None:
+        current_date = datetime.now()
+        year, month, day = (current_date - timedelta(days=n_days_before)).strftime("%Y-%m-%d").split("-")
+        
     host = 'https://n5eil01u.ecs.nsidc.org'
     version = '009'  # product version
     url_path = '{}/SMAP/SPL3SMP.{}/{}.{}.{}/'.format(host, version, year, month, day)
@@ -160,5 +162,6 @@ def remove_empty_folders():
 
 
 if __name__ == '__main__':
-    download_smap_automatically(n_days_before=2)
+    # Provide either year,mm,dd or number of days to look back
+    download_smap_automatically(year='2024', month='04', day='04', n_days_before=2)
     chop_in_quadhash()
