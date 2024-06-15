@@ -2,42 +2,52 @@ import socket
 import subprocess
 import gdal
 import numpy as np
-import mercantile,fiona
-import rasterio as rio
-from rasterio import mask as msk
-import random
-import geopy.distance
-import os, osr
+import os
 import geopandas as gpd
-import shutil
 import h5py
-import pickle
-import json
-import calendar
 from datetime import datetime, timedelta
 import requests
 
-username = "paahukh22"
-password = "Paahuni@1234"
+username = "YOUR-NAME"
+password = "YOUR-PASSWORD"
 
-def download_smap_automatically():
-    # Downloads SMAP Soil moisture from yesterday in .h5 format
-    current_date = datetime.now()
-    year, month, day = (current_date - timedelta(days=1)).strftime("%Y-%m-%d").split("-")
+# Output will get stored in ROOT_PATH/split_14
+ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap"
+os.makedirs(ROOT_PATH, exist_ok=True)
+
+'''
+    Downloads SMAP Soil moisture from 2 days back in .h5 format
+    The download path changes every year (majorly the product version of the product)
+'''
+def download_smap_automatically(year=None, month=None, day=None, n_days_before=2):
+    if year is None or month is None or day is None:
+        current_date = datetime.now()
+        year, month, day = (current_date - timedelta(days=n_days_before)).strftime("%Y-%m-%d").split("-")
 
     host = 'https://n5eil01u.ecs.nsidc.org/'
-    version = '.005'
+    version = '.006'  # product version
     url_path = '{}/SMAP/SPL3SMP_E{}/{}.{}.{}/'.format(host,version,year,month,day)
-    filename = 'SMAP_L3_SM_P_E_{}{}{}_R18290_001.h5'.format(year,month,day)
 
+    file_version = '001'
+    filename = 'SMAP_L3_SM_P_E_{}{}{}_R19240_{}.h5'.format(year,month,day, file_version)
     smap_data_path = url_path + filename
-
-    DATA_DIR = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/smap/raw/"
+    out_dir = ROOT_PATH + "/raw/"
+    os.makedirs(out_dir, exist_ok=True)
 
     with requests.Session() as session:
         session.auth = (username, password)
-        filepath = os.path.join(DATA_DIR, filename)
+        filepath = os.path.join(out_dir, filename)
         response = session.get(smap_data_path)
+
+        if not response.ok:
+            print('Error downloading with file_version="001". Retrying with file_version="002"')
+
+            file_version = '002'
+            filename = 'SMAP_L3_SM_P_E_{}{}{}_R19240_{}.h5'.format(year, month, day, file_version)
+            smap_data_path = url_path + filename
+            filepath = os.path.join(out_dir, filename)
+            response = session.get(smap_data_path)
+
         if response.status_code == 401:
             response = session.get(response.url)
         assert response.ok, 'Problem downloading data! Reason: {}'.format(response.reason)
@@ -47,15 +57,17 @@ def download_smap_automatically():
 
         print(filename + ' downloaded')
         print('Downloading SMAP data for: ' + str(year) + '-' + str(month).zfill(2) + '-' + str(day).zfill(2))
+    load_file_h5()
 
 def list_all_bands_in_h5_file(file_path):
     def list_datasets(name, obj):
         if isinstance(obj, h5py.Dataset):
-            if 'Soil_Moisture_Retrieval_Data_PM/soil_moi' in name:
+            if 'Soil_Moisture_Retrieval_Data_PM/soil_' in name:
                 print(name)
 
     with h5py.File(file_path, 'r') as file:
         file.visititems(list_datasets)
+
 
 def create_geotiff(data, output_file):
     driver = gdal.GetDriverByName('GTiff')
@@ -66,10 +78,11 @@ def create_geotiff(data, output_file):
     dataset.SetProjection("EPSG:4326")
     dataset = None
 
+
 def load_file_h5():
-    file_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/smap/raw/"
+    file_path = ROOT_PATH + "/raw/"
     am_dataset_name = "Soil_Moisture_Retrieval_Data_AM/soil_moisture"
-    pm_dataset_name = "Soil_Moisture_Retrieval_Data_PM/soil_moisture_dca_pm"
+    pm_dataset_name = "Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm"
 
     for f in os.listdir(file_path):
         if not f.endswith(".h5"): continue
@@ -97,28 +110,14 @@ def load_file_h5():
                 print('No soil moisture band found for: ', f)
         os.remove(file_path + f)
 
-def transfer_tifs_to_all_machines():
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/smap/raw/"
-    for send_to_lattice in range(176, 224):
-        if send_to_lattice == int(socket.gethostname().split("-")[1]):
-            continue
-        out_path = "/s/lattice-" + str(send_to_lattice) + "/b/nobackup/galileo/sm_predictions/input_datasets/smap/raw/"
-
-        files_to_transfer = os.listdir(in_path)
-
-        for file_name in files_to_transfer:
-            source_file = os.path.join(in_path, file_name)
-            command = ['scp', source_file, 'paahuni@lattice-' + str(send_to_lattice) + ":" + out_path]
-            subprocess.run(command)
-
-        print("Sent to lattice-", send_to_lattice)
 
 def chop_in_quadhash():
     quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_12_"))
     quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
 
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/smap/raw/"
-    out_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/smap/split_14/"
+    in_path = ROOT_PATH + "/raw/"
+    out_path = ROOT_PATH + "/split_14/"
+    os.makedirs(out_path, exist_ok=True)
 
     count = 0
     total = len(quadhashes)
@@ -131,16 +130,19 @@ def chop_in_quadhash():
         window = (bounds[0][0], bounds[0][1], bounds[2][0], bounds[2][1])
 
         for f in os.listdir(in_path):
-            gdal.Translate(out_path + qua + '/' + f,  in_path + f, projWin=window)
+            fnew = f.split("_")[5] + ".tif"
+            gdal.Translate(out_path + qua + '/' + fnew, in_path + f, projWin=window)
 
-            x = gdal.Open(out_path + qua + '/' + f).ReadAsArray()
+            x = gdal.Open(out_path + qua + '/' + fnew).ReadAsArray()
             if np.min(x) == np.max(x) == -9999.0:
-                os.remove(out_path + qua + '/' + f)
+                os.remove(out_path + qua + '/' + fnew)
 
     remove_empty_folders()
+    for f in os.listdir(in_path):
+        os.remove(in_path + f)
 
 def remove_empty_folders():
-    in_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/smap/split_14/"
+    in_path = ROOT_PATH + "/split_14/"
     tot = len(os.listdir(in_path))
     count = 0
     for q in os.listdir(in_path):
@@ -150,8 +152,8 @@ def remove_empty_folders():
             os.rmdir(in_path + q)
     print(count, "/", tot)
 
-if __name__ == '__main__':
-    download_smap_automatically()
-    load_file_h5()
-    chop_in_quadhash()
 
+if __name__ == '__main__':
+    # Provide either year,mm,dd or number of days to look back
+    download_smap_automatically(year='2024', month='04', day='04', n_days_before=2)
+    chop_in_quadhash()
