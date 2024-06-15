@@ -1,3 +1,4 @@
+# NOTE: We are not using LAI anymore in model training and predictions
 import socket
 import os
 from modis_tools.auth import ModisSession
@@ -8,8 +9,8 @@ import gdal
 import subprocess
 import glob
 
-username = "paahukh22"
-password = "Paahuni@1234"
+username = "YOUR-USERNAME"
+password = "YOUR-PASSWORD"
 
 def download_lai_automatically():
     download_path = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/input_datasets/MCD15A3H/raw/"
