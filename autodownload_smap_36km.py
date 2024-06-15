@@ -20,6 +20,7 @@ import requests
 username = "YOUR-USERNAME"
 password = "YOUR-PASSWORD"
 
+# Output stored under ROOT_PATH/raw/
 ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
 os.makedirs(ROOT_PATH, exist_ok=True)
 
@@ -31,7 +32,7 @@ def download_smap_automatically(year=None, month=None, day=None, n_days_before=2
     if year is None or month is None or day is None:
         current_date = datetime.now()
         year, month, day = (current_date - timedelta(days=n_days_before)).strftime("%Y-%m-%d").split("-")
-        
+
     host = 'https://n5eil01u.ecs.nsidc.org'
     version = '009'  # product version
     url_path = '{}/SMAP/SPL3SMP.{}/{}.{}.{}/'.format(host, version, year, month, day)
@@ -101,67 +102,23 @@ def load_file_h5():
                 merged_data = am_data.copy()
                 merged_data[am_data == -9999.0] = pm_data[am_data == -9999.0]
 
-                output_file = f"{file_path}{f.split('.h5')[0]}.tif"
+                output_file = f"{file_path}{f.split('_')[4]}.tif"
                 create_geotiff(merged_data, output_file)
 
             elif am_dataset_name in file:
                 am_data = file[am_dataset_name][()]
-                output_file = f"{file_path}{f.split('.h5')[0]}.tif"
+                output_file = f"{file_path}{f.split('_')[4]}.tif"
                 create_geotiff(am_data, output_file)
 
             elif pm_dataset_name in file:
                 pm_data = file[pm_dataset_name][()]
-                output_file = f"{file_path}{f.split('.h5')[0]}.tif"
+                output_file = f"{file_path}{f.split('_')[4]}.tif"
                 create_geotiff(pm_data, output_file)
 
             else:
                 print('No soil moisture band found for: ', f)
         os.remove(file_path + f)
 
-
-def chop_in_quadhash():
-    quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_12_"))
-    quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
-
-    in_path = ROOT_PATH + "/raw/"
-    out_path = ROOT_PATH + "/split_14/"
-    os.makedirs(out_path, exist_ok=True)
-
-    count = 0
-    total = len(quadhashes)
-    for ind, row in quadhashes.iterrows():
-        count += 1
-        print("processing:  ", count, "/", total)
-        poly, qua = row["geometry"], row["Quadkey"]
-        os.makedirs(out_path + qua, exist_ok=True)
-        bounds = list(poly.exterior.coords)
-        window = (bounds[0][0], bounds[0][1], bounds[2][0], bounds[2][1])
-
-        for f in os.listdir(in_path): 
-            fnew = f.split("_")[4] + ".tif"
-            gdal.Translate(out_path + qua + '/' + fnew, in_path + f, projWin=window)
-
-            x = gdal.Open(out_path + qua + '/' + fnew).ReadAsArray()
-            if np.min(x) == np.max(x) == -9999.0:
-                os.remove(out_path + qua + '/' + fnew)
-
-    remove_empty_folders()
-    for f in os.listdir(in_path):
-        os.remove(in_path + f)
-
-def remove_empty_folders():
-    in_path = ROOT_PATH + "/split_14/"
-    tot = len(os.listdir(in_path))
-    count = 0
-    for q in os.listdir(in_path):
-        if len(os.listdir(in_path + q)) == 0:
-            print("No files in :", q)
-            count += 1
-            os.rmdir(in_path + q)
-    print(count, "/", tot)
-
-
 if __name__ == '__main__':
     # Provide either year,mm,dd or number of days to look back
     download_smap_automatically(year='2024', month='04', day='04', n_days_before=2)
-    chop_in_quadhash()
