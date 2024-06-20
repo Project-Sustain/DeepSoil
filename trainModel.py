@@ -21,7 +21,7 @@ mem_per_cpu_max = 30
 mem_per_cpu_min = 10
 mem_per_cpu_step = 5
 
-SCRIPT_PATH = "/s/lovelace/f/nobackup/shrideep/sustain/everett/cl_3.8/deepSoil/models/sm_model_ev.py"
+SCRIPT_PATH = "./models/sm_model_ev.py"
 
 
 class Preset:
