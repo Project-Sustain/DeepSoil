@@ -17,12 +17,34 @@ ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/d
 os.makedirs(ROOT_PATH, exist_ok=True)
 
 
-def download_nc_file():
+
+def download_nc_file(year=None, month=None, day=None, n_days_before=2):
+    in_path = ROOT_PATH + "/raw/"
     os.makedirs(ROOT_PATH + "/raw", exist_ok=True)
-    year = datetime.datetime.now().year
-    print(subprocess.run(["./download_daily_gridmet.sh " + str(year)], shell=True))
-    print(subprocess.run(["mv *_{}.nc {}/raw/".format(year, ROOT_PATH)], shell=True))
-    convert_to_tif()
+    if year is None or month is None or day is None:
+        current_date = datetime.date.today()
+        year = current_date.year
+        delta = datetime.timedelta(days=n_days_before)
+        date_string = current_date - delta
+    else:
+        date_string = str(year) + str(month).zfill(2) + str(day).zfill(2)
+        date_string = datetime.datetime.strptime(date_string, '%Y%m%d').date()
+    doy_needed = date_to_day_of_year(date_string)
+    date = None
+    if os.path.exists(in_path + 'last_downloaded.txt'):
+        with open(in_path + 'last_downloaded.txt', 'r') as file:
+            date = str(file.read())
+    if date is None or datetime.date.today().strftime('%Y%m%d') != date:
+            print(subprocess.run(["./download_daily_gridmet.sh " + str(year)], shell=True))
+            print(subprocess.run(["mv *_{}.nc {}/raw/".format(year, ROOT_PATH)], shell=True))
+            with open(in_path + "last_downloaded.txt", 'w') as file:
+                file.write(datetime.date.today().strftime('%Y%m%d'))
+
+    convert_to_tif(doy_needed)
+
+def date_to_day_of_year(date_string):
+    doy = date_string.timetuple().tm_yday
+    return doy
 
 
 def day_of_year_to_date(day_of_year, year):
@@ -38,9 +60,12 @@ def convert_to_tif():
 
         ds = gdal.Open(in_path + f)
         num_bands = ds.RasterCount
-        out_tif = in_path + f.split(".nc")[0] + '.tif'
-        last_time_slice_band = ds.GetRasterBand(num_bands)
+        if num_bands < doy_needed:
+            print("Data for given date not available!")
+            return
 
+        out_tif = in_path + f.split(".nc")[0] + '.tif'
+        last_time_slice_band = ds.GetRasterBand(doy_needed)
         gtiff_driver = gdal.GetDriverByName("GTiff")
         output_ds = gtiff_driver.Create(out_tif, ds.RasterXSize, ds.RasterYSize, 1, gdal.GDT_Float64)
         output_band = output_ds.GetRasterBand(1)
@@ -58,7 +83,7 @@ def convert_to_tif():
             file.write(str(num_bands))
 
         print("Converted ", f)
-        os.remove(in_path + f)
+        # os.remove(in_path + f)
     merge_bands_gridmet()
 
 def merge_bands_gridmet():
@@ -121,6 +146,10 @@ def merge_bands_gridmet():
     dst_ds.GetRasterBand(9).WriteArray(vpd)
     ds = None
 
+    for f in os.listdir(in_path):
+        if f.endswith(".tif"):
+            os.remove(in_path + f)
+
 
 def remove_empty_folders():
     in_path = ROOT_PATH + "/split_14/"
@@ -179,7 +208,7 @@ def chop_in_quadhash():
         os.remove(in_path + f)
 
 if __name__ == '__main__':
-    download_nc_file()
+    download_nc_file(year=None, month=6, day=9, n_days_before=2)
     # Uncomment below line if you are downloading data on one machine and transferring merged file to remaining machines
     # transfer_tifs_to_all_machines()
     chop_in_quadhash()
