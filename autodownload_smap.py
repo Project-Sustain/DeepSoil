@@ -15,6 +15,28 @@ password = "YOUR-PASSWORD"
 ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap"
 os.makedirs(ROOT_PATH, exist_ok=True)
 
+def download_smap_with_version(year, month, day, url_path, file_version='001'):
+    filename = 'SMAP_L3_SM_P_E_{}{}{}_R19240_{}.h5'.format(year, month, day, file_version)
+    smap_data_path = url_path + filename
+    out_dir = ROOT_PATH + "/raw/"
+    os.makedirs(out_dir, exist_ok=True)
+    with requests.Session() as session:
+        session.auth = (username, password)
+        filepath = os.path.join(out_dir, filename)
+        response = session.get(smap_data_path)
+
+        if not response.ok:
+            print('Error downloading with file_version={}'.format(file_version))
+            response = session.get(response.url)
+            print("Possible reason: ", response.reason)
+            return None
+
+        with open(filepath, 'wb') as f:
+            f.write(response.content)
+
+        print('Successfully downloaded', filename, " with version ", file_version)
+        return 1
+
 '''
     Downloads SMAP Soil moisture from 2 days back in .h5 format
     The download path changes every year (majorly the product version of the product)
@@ -23,41 +45,23 @@ def download_smap_automatically(year=None, month=None, day=None, n_days_before=2
     if year is None or month is None or day is None:
         current_date = datetime.now()
         year, month, day = (current_date - timedelta(days=n_days_before)).strftime("%Y-%m-%d").split("-")
+        print("\nLooking for: {}/{}/{}".format(year, month, day))
 
     host = 'https://n5eil01u.ecs.nsidc.org/'
-    version = '.006'  # product version
-    url_path = '{}/SMAP/SPL3SMP_E{}/{}.{}.{}/'.format(host,version,year,month,day)
+    version = '.006'                            # product version
+    url_path = '{}/SMAP/SPL3SMP_E{}/{}.{}.{}/'.format(host, version, year, month, day)
 
-    file_version = '001'
-    filename = 'SMAP_L3_SM_P_E_{}{}{}_R19240_{}.h5'.format(year,month,day, file_version)
-    smap_data_path = url_path + filename
-    out_dir = ROOT_PATH + "/raw/"
-    os.makedirs(out_dir, exist_ok=True)
+    out = download_smap_with_version(year, month, day, url_path, file_version='001')
+    count_v = 2
+    while out is None and count_v <= 9:
+        print("Trying new new version: ", count_v)
+        out = download_smap_with_version(year, month, day, url_path, file_version=str(count_v).zfill(3))
+        count_v += 1
+    if out is None:
+        print("No data found with any versions")
+    else:
+        load_file_h5()
 
-    with requests.Session() as session:
-        session.auth = (username, password)
-        filepath = os.path.join(out_dir, filename)
-        response = session.get(smap_data_path)
-
-        if not response.ok:
-            print('Error downloading with file_version="001". Retrying with file_version="002"')
-
-            file_version = '002'
-            filename = 'SMAP_L3_SM_P_E_{}{}{}_R19240_{}.h5'.format(year, month, day, file_version)
-            smap_data_path = url_path + filename
-            filepath = os.path.join(out_dir, filename)
-            response = session.get(smap_data_path)
-
-        if response.status_code == 401:
-            response = session.get(response.url)
-        assert response.ok, 'Problem downloading data! Reason: {}'.format(response.reason)
-
-        with open(filepath, 'wb') as f:
-            f.write(response.content)
-
-        print(filename + ' downloaded')
-        print('Downloading SMAP data for: ' + str(year) + '-' + str(month).zfill(2) + '-' + str(day).zfill(2))
-    load_file_h5()
 
 def list_all_bands_in_h5_file(file_path):
     def list_datasets(name, obj):
@@ -155,5 +159,5 @@ def remove_empty_folders():
 
 if __name__ == '__main__':
     # Provide either year,mm,dd or number of days to look back
-    download_smap_automatically(year='2024', month='04', day='04', n_days_before=2)
+    download_smap_automatically(year='2024', month=None, day='04', n_days_before=2)
     chop_in_quadhash()
