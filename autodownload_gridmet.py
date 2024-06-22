@@ -52,7 +52,7 @@ def day_of_year_to_date(day_of_year, year):
     return date.strftime('%Y%m%d')
 
 
-def convert_to_tif():
+def convert_to_tif(doy_needed):
     in_path = ROOT_PATH + "/raw/"
     for f in os.listdir(in_path):
         if not f.endswith('.nc'):
