@@ -4,18 +4,20 @@ import subprocess
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
-from dataset_loader import QuadhashDataset, QuadhashDatasetModel1, Dataloader
+from dataset_loader_with_mapping import QuadhashDataset, QuadhashDatasetModel1, QuadhashDatasetAllQuads, Dataloader
 import torch
 import torch.nn as nn
 import gdal
 np.set_printoptions(suppress=True)
 import cv2
 import math
+import sys
+# Citation for UNET model taken from original paper Pix2PixGan: https://raw.githubusercontent.com/ermongroup/ncsn/master/models/pix2pix.py
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 # OUT_PATH = "/s/lovelace/f/nobackup/shrideep/sustain"
 OUT_PATH = "/s/chopin/f/proj/fineET/"
+
 
 def get_input_batch(data, isTraining=True, batch_size=64, isModel1=False):
     batch_size = batch_size
@@ -34,11 +36,13 @@ def get_input_batch(data, isTraining=True, batch_size=64, isModel1=False):
     dataloader_new = DataLoader(my_dataset, batch_size=batch_size, shuffle=True, num_workers=3)
     return dataloader_new
 
+
 def generator_loss(generated_image, target_img):
     l1_loss = nn.L1Loss()
     mask = (target_img != -1).float()
     l1_l = l1_loss(generated_image * mask, target_img * mask)
     return l1_l
+
 
 def generator_acc(generated_image, target_img):
     mask = (target_img != -1).float()
@@ -47,6 +51,99 @@ def generator_acc(generated_image, target_img):
     mse = nn.functional.mse_loss(generated_image, target_img)
     psnr = 20 * torch.log10(1 / torch.sqrt(mse))
     return psnr
+
+'''This unet architecture takes (64,64) and generates sm at 64,64,1'''
+class UnetSkipConnectionBlock(nn.Module):
+    def __init__(self, outer_nc, inner_nc, input_nc=None,
+                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, final_out=1):
+        super(UnetSkipConnectionBlock, self).__init__()
+        self.outermost = outermost
+        if input_nc is None:
+            input_nc = outer_nc
+
+        self.downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
+                                  stride=2, padding=1, bias=False)
+        self.downrelu = nn.LeakyReLU(0.2, True)
+        self.downnorm = norm_layer(inner_nc)
+        self.uprelu = nn.ReLU(True)
+        self.upnorm = norm_layer(outer_nc)
+        self.last_activation = nn.ReLU(True)
+
+        if outermost:
+            self.start_conv = nn.Conv2d(2, 512, kernel_size=3, stride=1, padding=1)
+            self.start_conv3 = nn.Conv2d(512, 128, kernel_size=3, stride=1, padding=1)
+            self.start_conv4 = nn.Conv2d(128, 1, kernel_size=3, stride=1, padding=1)
+            self.start_conv5 = nn.Conv2d(2, final_out, kernel_size=3, stride=1, padding=1)
+
+            self.upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                             kernel_size=4, stride=2,
+                                             padding=1)
+            self.down = [self.downconv]
+            self.up = [self.uprelu, self.upconv, nn.ReLU(True)]
+            self.model = nn.Sequential(*self.down, submodule, *self.up)
+        elif innermost:
+            self.upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
+                                             kernel_size=4, stride=2,
+                                             padding=1, bias=False)
+            self.down = [self.downrelu, self.downconv]
+            self.up = [self.uprelu, self.upconv, self.upnorm]
+            self.model = nn.Sequential(*self.down, *self.up)
+        else:
+            self.upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                             kernel_size=4, stride=2,
+                                             padding=1, bias=False)
+            self.down = [self.downrelu, self.downconv, self.downnorm]
+            self.up = [self.uprelu, self.upconv, self.upnorm]
+
+            if use_dropout:
+                self.model = nn.Sequential(*self.down, submodule, *self.up, nn.Dropout(0.5))
+            else:
+                self.model = nn.Sequential(*self.down, submodule, *self.up)
+
+    def forward(self, x):
+        if self.outermost:
+            # removed 29
+            inp2 = x[:, [25, 29], :, :]
+            x = x[:, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29], :, :]
+
+            input_conv = self.start_conv(inp2)
+            input_conv = self.uprelu(input_conv)
+            input_conv = self.start_conv3(input_conv)
+            input_conv = self.uprelu(input_conv)
+            input_conv = self.start_conv4(input_conv)
+            input_conv = self.uprelu(input_conv)
+
+            my_model = self.model(x)
+            concatenated = torch.cat([input_conv, my_model], 1)
+            newc = self.start_conv5(concatenated)
+            newc = self.last_activation(newc)
+            return newc
+        else:
+            return torch.cat([x, self.model(x)], 1)
+
+
+'''This unet architecture takes (64,64) and generates sm 64,64,1'''
+class UnetGenerator(nn.Module):
+
+    def __init__(self, input_nc, output_nc, nf=32, norm_layer=nn.BatchNorm2d, use_dropout=False, final_out=1):
+        super(UnetGenerator, self).__init__()
+
+        unet_block = UnetSkipConnectionBlock(nf * 4, nf * 8, input_nc=None, innermost=True,
+                                             norm_layer=norm_layer, use_dropout=use_dropout)
+
+        unet_block = UnetSkipConnectionBlock(nf * 2, nf * 4, input_nc=None, submodule=unet_block,
+                                             norm_layer=norm_layer, use_dropout=use_dropout)
+
+        unet_block = UnetSkipConnectionBlock(nf, nf * 2, input_nc=None, submodule=unet_block,
+                                             norm_layer=norm_layer, use_dropout=use_dropout)
+
+        self.model = UnetSkipConnectionBlock(output_nc, nf, input_nc=input_nc, submodule=unet_block,
+                                             outermost=True, norm_layer=norm_layer, final_out=final_out)
+
+    def forward(self, input):
+        return self.model(input)
+
+
 
 class CustomLoss(nn.Module):
     def __init__(self):
@@ -57,6 +154,7 @@ class CustomLoss(nn.Module):
         mask = (target != -1).float()
         loss = self.criterion(input * mask, target * mask)
         return loss
+
 
 class CustomLoss_science_psnr(nn.Module):
     def __init__(self, mae_weight=1.0, psnr_weight=0.6, lc_weight=0.4, ssim_weight=0.5, rule_sm_weight=10):
@@ -73,7 +171,7 @@ class CustomLoss_science_psnr(nn.Module):
         target = target * mask
         mse = nn.functional.mse_loss(input, target)
         psnr = 20 * torch.log10(1 / torch.sqrt(mse))
-        return 52-psnr
+        return 52 - psnr
 
     def ssim_based_loss(self, input, target, mask):
         input = input * mask
@@ -109,10 +207,12 @@ class CustomLoss_science_psnr(nn.Module):
         mask = (target != -1).float()
         psnr_loss_val = self.psnr_loss(input, target, mask)
         mae_loss = self.mae_criterion(input * mask, target * mask)
-        rule_loss = self.rule_wrt_saturated_unsaturated(input, mask, input_image)
-        return self.mae_weight * mae_loss + self.psnr_penalty_weight * psnr_loss_val + self.rule_sm_weight * rule_loss, mae_loss
+        # rule_loss = self.rule_wrt_saturated_unsaturated(input, mask, input_image)
+        return self.mae_weight * mae_loss + self.psnr_penalty_weight * psnr_loss_val, mae_loss
 
-def plot_targed_inferred_only_samples(output_sample, target_img, l1_error, epoch, out_path, input_sample, training=True, PSNR_acc=0):
+
+def plot_targed_inferred_only_samples(output_sample, target_img, l1_error, epoch, out_path, input_sample, training=True,
+                                      PSNR_acc=0):
     plt.figure(figsize=(15, 15))
 
     plt.subplot(2, 4, 1)
@@ -193,9 +293,10 @@ def plot_targed_inferred_only_samples(output_sample, target_img, l1_error, epoch
         plt.savefig(out_path + 'testing/' + str(epoch) + '.png')
     plt.close()
 
+
 def train_model(generator, num_epochs=200, batch_size=64, dirno=1, lr=0.0001, isModel1=False, start_in=0, end_in=500):
     my_dataloader = Dataloader()
-    train_data, test_data = my_dataloader.load_all_datasets_in_memory(start_in, end_in)
+    train_data, test_data = my_dataloader.load_all_datasets_in_memory(start_in, end_in, dirno)
     train_dl = get_input_batch(train_data, isTraining=True, batch_size=batch_size, isModel1=isModel1)
     test_dl = get_input_batch(test_data, isTraining=False, batch_size=64, isModel1=isModel1)
 
@@ -280,8 +381,9 @@ def train_model(generator, num_epochs=200, batch_size=64, dirno=1, lr=0.0001, is
 
                 l1_error = generator_loss(output_sample[0], target_img[0])
                 PSNR_acc = generator_acc(output_sample[0], target_img[0])
-                plot_targed_inferred_only_samples(output_sample[0], target_img[0], l1_error, epoch, out_path, input_sample=input_sample_daily[0],
-                                     training=True, PSNR_acc=PSNR_acc)
+                plot_targed_inferred_only_samples(output_sample[0], target_img[0], l1_error, epoch, out_path,
+                                                  input_sample=input_sample_daily[0],
+                                                  training=True, PSNR_acc=PSNR_acc)
 
                 model_path = out_path + "model_weights.pth"
                 x = torch.randn(1, 35, 64, 64).to('cpu')
@@ -290,11 +392,13 @@ def train_model(generator, num_epochs=200, batch_size=64, dirno=1, lr=0.0001, is
 
     print("Training complete.")
 
+
 def load_model_weights(folder):
     out_path = OUT_PATH + "/sm_predictions/outputs/" + str(folder) + "/"
     model_path = out_path + "model_weights.pth"
     loaded_model = torch.jit.load(model_path)
     return loaded_model
+
 
 def perform_inferences(folder, one_per_quad=False, isModel1=False, start_in=0, end_in=500):
     model2 = load_model_weights(folder)
@@ -309,10 +413,10 @@ def perform_inferences(folder, one_per_quad=False, isModel1=False, start_in=0, e
     if isModel1:
         test_dataset = QuadhashDatasetModel1(training=False, one_per_quad=one_per_quad, corrected_hru=False)
     else:
-        _, test_data = my_dataloader_2.load_all_datasets_in_memory(start_in=start_in, end_in=end_in)
+        _, test_data = my_dataloader_2.load_all_datasets_in_memory(start_in=start_in, end_in=end_in, folder=folder)
         test_dataset = QuadhashDataset(test_data, training=False)
 
-    total_loss,total_psnr =[], []
+    total_loss, total_psnr = [], []
     dataloader_new = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=3)
     count = 0
     with torch.no_grad():
@@ -331,45 +435,48 @@ def perform_inferences(folder, one_per_quad=False, isModel1=False, start_in=0, e
                     psna = 48
                 total_psnr.append(round(psna, 1))
                 if count <= 50:
-                    plot_targed_inferred_only_samples(output_sample[i], target_img[i], l1_error, count, out_path, input_sample[i], training=False, PSNR_acc=psnr_acc)
+                    plot_targed_inferred_only_samples(output_sample[i], target_img[i], l1_error, count, out_path,
+                                                      input_sample[i], training=False, PSNR_acc=psnr_acc)
     loss_tot = np.round(np.mean(np.array(total_loss)), 3)
     psnr_tot = np.round(np.nanmean(np.array(total_psnr)), 5)
     print("Average loss on test data: ", loss_tot, "\nAverage PSNR accuracy: ", psnr_tot, flush=True)
     return loss_tot, psnr_tot
+
 
 def calculate_no_of_parameters(model):
     numel_list = [p.numel() for p in model.parameters() if p.requires_grad == True]
     print("Total number of trainable parameters in the model: ", sum(numel_list))
     return sum(numel_list)
 
-import sys
 if __name__ == '__main__':
     min_folder = int(sys.argv[1])
     # min_folder = int(input())
     # min_folder = 71 and 81
+    number_of_quads_per_model = 300
 
     loss_tots, psnr_tots = [], []
-    total = math.ceil(len(os.listdir("/s/lovelace/f/nobackup/shrideep/sustain/sm_predictions/input_datasets/hru/split_14/"))/1000)
+    total = math.ceil(
+        len(os.listdir("/s/lovelace/f/nobackup/shrideep/sustain/sm_predictions/input_datasets/nlcd/split_14/")) / number_of_quads_per_model)
+
     print("Total models need to be trained: ", total)
     max_folder = min_folder + 10
-    
-    #model = load_model_weights(1000).to(device).float()
-    #train_model(model, num_epochs=2011, batch_size=64, dirno=1, lr=0.0001, isModel1=False, start_in=0, end_in=4)
-    #sys.exit()
-    
-    for folder in range(1, total+1):
-        start_in = (folder - 1) * 1000
-        end_in = folder * 1000
-        if folder >= min_folder and folder < max_folder:
-            print("Training Model on folder: ", folder, "start_in: ", start_in,"end_in: ", end_in)
-            model = load_model_weights(1000).to(device).float()
-            train_model(model, num_epochs=2011, batch_size=64, dirno=folder, lr=0.0001, isModel1=False, start_in=start_in, end_in=end_in)
+    # model = load_model_weights(1000).to(device).float()
 
-            loss_tot, psnr_tot = perform_inferences(folder=folder, one_per_quad=True, isModel1=False, start_in=start_in, end_in=end_in)
+    for folder in range(1, total + 1):
+        start_in = (folder - 1) * number_of_quads_per_model
+        end_in = folder * number_of_quads_per_model
+        if folder >= min_folder and folder < max_folder:
+            print("Training Model on folder: ", folder, "start_in: ", start_in, "end_in: ", end_in)
+            model = UnetGenerator(input_nc=26, output_nc=1, nf=64, use_dropout=False, final_out=1).to(device).float()
+            train_model(model, num_epochs=11, batch_size=64, dirno=folder, lr=0.0001, isModel1=False,
+                        start_in=start_in, end_in=end_in)
+
+            loss_tot, psnr_tot = perform_inferences(folder=folder, one_per_quad=True, isModel1=False, start_in=start_in,
+                                                    end_in=end_in)
             loss_tots.append(loss_tot)
             psnr_tots.append(psnr_tot)
             print("Finished training on folder: ", folder)
-            
+
             cmd = ['setfacl', '-Rm', 'g:sustain:rwx', '/s/chopin/f/proj/fineET/sm_predictions/outputs/' + str(folder)]
             subprocess.call(cmd)
 
