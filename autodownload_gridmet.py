@@ -16,7 +16,7 @@ import datetime
 ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/gridmet"
 os.makedirs(ROOT_PATH, exist_ok=True)
 
-
+os.chdir(os.path.dirname(__file__))
 
 def download_nc_file(year=None, month=None, day=None, n_days_before=2):
     in_path = ROOT_PATH + "/raw/"
