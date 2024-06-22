@@ -15,6 +15,8 @@ password = "YOUR-PASSWORD"
 ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap"
 os.makedirs(ROOT_PATH, exist_ok=True)
 
+os.chdir(os.path.dirname(__file__))
+
 def download_smap_with_version(year, month, day, url_path, file_version='001'):
     filename = 'SMAP_L3_SM_P_E_{}{}{}_R19240_{}.h5'.format(year, month, day, file_version)
     smap_data_path = url_path + filename
