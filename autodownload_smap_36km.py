@@ -20,6 +20,8 @@ import requests
 username = "YOUR-USERNAME"
 password = "YOUR-PASSWORD"
 
+os.chdir(os.path.dirname(__file__))
+
 # Output stored under ROOT_PATH/raw/
 ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
 os.makedirs(ROOT_PATH, exist_ok=True)
