@@ -80,7 +80,7 @@ def convert_to_tif(doy_needed):
         ds = None
 
         with open(in_path + "last_updated.txt", 'w') as file:
-            file.write(str(num_bands))
+            file.write(str(doy_needed))
 
         print("Converted ", f)
         # os.remove(in_path + f)
