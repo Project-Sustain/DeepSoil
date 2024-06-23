@@ -129,7 +129,6 @@ def chop_in_quadhash():
     total = len(quadhashes)
     for ind, row in quadhashes.iterrows():
         count += 1
-        print("processing:  ", count, "/", total)
         poly, qua = row["geometry"], row["Quadkey"]
         os.makedirs(out_path + qua, exist_ok=True)
         bounds = list(poly.exterior.coords)
