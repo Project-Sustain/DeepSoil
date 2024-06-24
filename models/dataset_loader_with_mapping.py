@@ -21,18 +21,18 @@ class Dataloader:
         # root_path = "/s/chopin/f/proj/fineET/"
         root_path = "/s/lovelace/f/nobackup/shrideep/sustain/"
         # root_path = "/s/lattice-191/b/nobackup/galileo/"
-        self.hru_sm_path = root_path + "sm_predictions/california/input_datasets/hru/split_14/" #target
+        self.hru_sm_path = root_path + "sm_predictions/input_datasets/hru/split_14/" #target
 
-        self.polaris_path = root_path + "sm_predictions/california/input_datasets/polaris/split_14/"
-        self.nlcd_path = root_path + "sm_predictions/california/input_datasets/nlcd/split_14/"
-        self.gNATSGO_path = root_path + "sm_predictions/california/input_datasets/gnatsgo/split_14/"
-        self.dem_path = root_path + "sm_predictions/california/input_datasets/dem/split_14/"
-        self.koppen_path = root_path + "sm_predictions/california/input_datasets/koppen/split_14/"
+        self.polaris_path = root_path + "sm_predictions/input_datasets/polaris/split_14/"
+        self.nlcd_path = root_path + "sm_predictions/input_datasets/nlcd/split_14/"
+        self.gNATSGO_path = root_path + "sm_predictions/input_datasets/gnatsgo/split_14/"
+        self.dem_path = root_path + "sm_predictions/input_datasets/dem/split_14/"
+        self.koppen_path = root_path + "sm_predictions/input_datasets/koppen/split_14/"
 
-        self.smap_path = root_path + "sm_predictions/california/input_datasets/smap/split_14/"
-        self.gridmet_path = root_path + "sm_predictions/california/input_datasets/gridmet/split_14/"
-        self.lai_path = root_path + "sm_predictions/california/input_datasets/MCD15A3H/split_14/"
-        self.landsat8_path = root_path + "sm_predictions/california/input_datasets/landsat8L2/split_14/"
+        self.smap_path = root_path + "sm_predictions/input_datasets/smap/split_14/"
+        self.gridmet_path = root_path + "sm_predictions/input_datasets/gridmet/split_14/"
+        self.lai_path = root_path + "sm_predictions/input_datasets/MCD15A3H/split_14/"
+        self.landsat8_path = root_path + "sm_predictions/input_datasets/landsat8L2/split_14/"
         self.meta_path = root_path + "sm_predictions/outputs/meta_files/"
 
     def scale_image_polaris(self, data_array):
