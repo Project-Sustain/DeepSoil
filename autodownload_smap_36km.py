@@ -1,29 +1,18 @@
 import socket
-import subprocess
-import gdal
-import numpy as np
-import mercantile, fiona
-import rasterio as rio
-from rasterio import mask as msk
-import random
-import geopy.distance
-import os, osr
-import geopandas as gpd
-import shutil
-import h5py
-import pickle
-import json
-import calendar
+import os
 from datetime import datetime, timedelta
 import requests
+import h5py
+import gdal
 
-username = "YOUR-USERNAME"
-password = "YOUR-PASSWORD"
+username = "YOUR-USERNAME"  # ToDo Update this
+password = "YOUR-PASSWORD"  # ToDo Update this
 
-os.chdir(os.path.dirname(__file__))
+# os.chdir(os.path.dirname(__file__))  # This was original, but didn't work
+os.chdir(os.getcwd())
 
 # Output stored under ROOT_PATH/raw/
-ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
+ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/deepsoil/smap_36"
 os.makedirs(ROOT_PATH, exist_ok=True)
 
 '''
