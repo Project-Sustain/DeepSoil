@@ -78,8 +78,8 @@ def create_shp_file():
             continue
         count += 1
         states_on_machine = 176 + (count % 48)
-        if states_on_machine == 177:
-            states_on_machine = 224
+        # if states_on_machine == 177:
+        #     states_on_machine = 224
         if states_on_machine == int(socket.gethostname().split("-")[1]):
             download_for_state = row['NAME']
             break
