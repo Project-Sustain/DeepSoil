@@ -1,14 +1,7 @@
 import socket
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import mercantile,fiona
-import geopy.distance
 import os, osr
-import json
-from pyquadkey2.quadkey import QuadKey
-import pyquadkey2
-import numpy as np
-import rasterio
 
 # GET QUADHASH TILE OF A GIVEN COORDINATE
 def get_quad_tile(lat, lon, precision):
