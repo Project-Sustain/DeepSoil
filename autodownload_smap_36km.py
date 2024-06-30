@@ -4,9 +4,11 @@ from datetime import datetime, timedelta
 import requests
 import h5py
 import gdal
+import geopandas as gpd
+import numpy as np
 
-username = "YOUR-USERNAME"  # ToDo Update this
-password = "YOUR-PASSWORD"  # ToDo Update this
+username = "honeybadgerofdoom"
+password = "Ibex!808_EARTHDATA"
 
 # os.chdir(os.path.dirname(__file__))  # This was original, but didn't work
 os.chdir(os.getcwd())
@@ -38,6 +40,8 @@ def download_smap_automatically(year=None, month=None, day=None, n_days_before=2
         session.auth = (username, password)
         filepath = os.path.join(out_dir, filename)
         response = session.get(smap_data_path)
+
+        print(response)
 
         if not response.ok:
             print('Error downloading with file_version="001". Retrying with file_version="002"')
@@ -80,6 +84,7 @@ def create_geotiff(data, output_file):
 
 
 def load_file_h5():
+    print('in load_file_h5()')
     file_path = ROOT_PATH + "/raw/"
     am_dataset_name = "Soil_Moisture_Retrieval_Data_AM/soil_moisture"
     pm_dataset_name = "Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm"
@@ -110,6 +115,56 @@ def load_file_h5():
                 print('No soil moisture band found for: ', f)
         os.remove(file_path + f)
 
+def chop_in_quadhash():
+    # quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_12_"))
+    '''
+    ToDo
+        - We need to create shapefiles for quadshape_9
+        - This happens in 'create_shp_file' in quadhash_helper.py
+        - We appended 9 to the `zoom` list on line 107 so we get zoom level 9
+    '''
+    quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_9_"))
+    quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
+
+    in_path = ROOT_PATH + "/raw/"
+    out_path = ROOT_PATH + "/split_14/"
+    os.makedirs(out_path, exist_ok=True)
+
+    count = 0
+    total = len(quadhashes)
+    for ind, row in quadhashes.iterrows():
+        count += 1
+        poly, qua = row["geometry"], row["Quadkey"]
+        os.makedirs(out_path + qua, exist_ok=True)
+        bounds = list(poly.exterior.coords)
+        window = (bounds[0][0], bounds[0][1], bounds[2][0], bounds[2][1])
+
+        for f in os.listdir(in_path):
+            fnew = f.split("_")[5] + ".tif"
+            gdal.Translate(out_path + qua + '/' + fnew, in_path + f, projWin=window)
+
+            x = gdal.Open(out_path + qua + '/' + fnew).ReadAsArray()
+            if np.min(x) == np.max(x) == -9999.0:
+                os.remove(out_path + qua + '/' + fnew)
+
+    remove_empty_folders()
+    for f in os.listdir(in_path):
+        os.remove(in_path + f)
+
+def remove_empty_folders():
+    in_path = ROOT_PATH + "/split_14/"
+    tot = len(os.listdir(in_path))
+    count = 0
+    for q in os.listdir(in_path):
+        if len(os.listdir(in_path + q)) == 0:
+            print("No files in :", q)
+            count += 1
+            os.rmdir(in_path + q)
+    print(count, "/", tot)
+
+
+
 if __name__ == '__main__':
     # Provide either year,mm,dd or number of days to look back
-    download_smap_automatically(year='2024', month='04', day='04', n_days_before=2)
+    # download_smap_automatically(year='2024', month='06', day='23', n_days_before=30)
+    download_smap_automatically(n_days_before=30)

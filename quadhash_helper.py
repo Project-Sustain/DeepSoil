@@ -104,7 +104,7 @@ def create_shp_file():
     area_of_interest_lon1, area_of_interest_lon2 = state_info["geometry"].bounds['minx'].iloc[0],\
         state_info["geometry"].bounds['maxx'].iloc[0]
 
-    zoom = [12, 14]
+    zoom = [9, 12, 14]
     for z in zoom:
         os.makedirs('./quadshape_' + str(z) + '_' + download_for_state.replace(" ", "_"), exist_ok=True)
         polyShp = fiona.open('./quadshape_' + str(z) + '_' + download_for_state.replace(" ", "_") + '/quadhash.shp', mode='w', driver='ESRI Shapefile',

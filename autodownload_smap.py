@@ -118,7 +118,14 @@ def load_file_h5():
 
 
 def chop_in_quadhash():
-    quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_12_"))
+    # quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_12_"))
+    '''
+    ToDo
+        - We need to create shapefiles for quadshape_9
+        - This happens in 'create_shp_file' in quadhash_helper.py
+        - We appended 9 to the `zoom` list on line 107 so we get zoom level 9
+    '''
+    quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_9_"))
     quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
 
     in_path = ROOT_PATH + "/raw/"
