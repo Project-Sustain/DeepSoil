@@ -85,8 +85,6 @@ def create_shp_file():
             continue
         count += 1
         states_on_machine = 176 + (count % 48)
-        if states_on_machine == 177:
-            states_on_machine = 224
         if states_on_machine == int(socket.gethostname().split("-")[1]):
             download_for_state = row['NAME']
             break
@@ -104,7 +102,7 @@ def create_shp_file():
     area_of_interest_lon1, area_of_interest_lon2 = state_info["geometry"].bounds['minx'].iloc[0],\
         state_info["geometry"].bounds['maxx'].iloc[0]
 
-    zoom = [12, 14]
+    zoom = [3, 9, 12, 14]
     for z in zoom:
         os.makedirs('./quadshape_' + str(z) + '_' + download_for_state.replace(" ", "_"), exist_ok=True)
         polyShp = fiona.open('./quadshape_' + str(z) + '_' + download_for_state.replace(" ", "_") + '/quadhash.shp', mode='w', driver='ESRI Shapefile',
