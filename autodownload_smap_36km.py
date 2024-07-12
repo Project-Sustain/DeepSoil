@@ -57,6 +57,8 @@ def download_smap_automatically(year=None, month=None, day=None, n_days_before=2
             filename = 'SMAP_L3_SM_P_{}{}{}_R19240_{}.h5'.format(year, month, day, file_version)
             smap_data_path = url_path + filename
             filepath = os.path.join(out_dir, filename)
+            print("PATHL ", smap_data_path)
+
             response = session.get(smap_data_path)
 
         if response.status_code == 401:
@@ -84,7 +86,7 @@ def create_geotiff(data, output_file):
     driver = gdal.GetDriverByName('GTiff')
     dataset = driver.Create(output_file, data.shape[1], data.shape[0], 1, gdal.GDT_Float32)
     dataset.GetRasterBand(1).WriteArray(data)
-    geotransform = (-180.00, 0.0174532925199433, 0, 85.0445, 0, -0.0174532925199433)
+    geotransform = (-180.00, 0.373443973830433, 0, 85.0445, 0, -0.373443973830433)
     dataset.SetGeoTransform(geotransform)
     dataset.SetProjection("EPSG:4326")
     dataset = None
@@ -121,6 +123,46 @@ def load_file_h5():
                 print('No soil moisture band found for: ', f)
         os.remove(file_path + f)
 
+
+def chop_in_quadhash():
+    quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_3_"))
+    quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
+
+    in_path = ROOT_PATH + "/raw/"
+    out_path = ROOT_PATH + "/split_3/"
+    os.makedirs(out_path, exist_ok=True)
+
+    count = 0
+    for ind, row in quadhashes.iterrows():
+        count += 1
+        poly, qua = row["geometry"], row["Quadkey"]
+        os.makedirs(out_path + qua, exist_ok=True)
+        bounds = list(poly.exterior.coords)
+        window = (bounds[0][0], bounds[0][1], bounds[2][0], bounds[2][1])
+        for f in os.listdir(in_path):
+            gdal.Translate(out_path + qua + '/' + f, in_path + f, projWin=window)
+
+            x = gdal.Open(out_path + qua + '/' + f).ReadAsArray()
+            if np.min(x) == np.max(x) == -9999.0:
+                os.remove(out_path + qua + '/' + f)
+
+    remove_empty_folders()
+
+
+def remove_empty_folders():
+    in_path = ROOT_PATH + "/split_3/"
+    tot = len(os.listdir(in_path))
+    count = 0
+    for q in os.listdir(in_path):
+        if len(os.listdir(in_path + q)) == 0:
+            print("No files in :", q)
+            count += 1
+            os.rmdir(in_path + q)
+    print(count, "/", tot)
+
 if __name__ == '__main__':
     # Provide either year,mm,dd or number of days to look back
-    download_smap_automatically(year='2024', month='04', day='04', n_days_before=2)
+    # Remove for loop below if want one day prediction
+    for i in range(2,50):
+        download_smap_automatically(year=None, month='04', day='04', n_days_before=i)
+    chop_in_quadhash()
