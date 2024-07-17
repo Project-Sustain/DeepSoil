@@ -1,29 +1,23 @@
 import socket
-import subprocess
-import gdal
 import numpy as np
-import mercantile, fiona
-import rasterio as rio
-from rasterio import mask as msk
-import random
-import geopy.distance
-import os, osr
+import os
 import geopandas as gpd
-import shutil
+import mercantile
+import rasterio
+from rasterio.crs import CRS
+from rasterio.warp import reproject, calculate_default_transform
 import h5py
-import pickle
-import json
-import calendar
 from datetime import datetime, timedelta
 import requests
 
-username = "YOUR-USERNAME"
-password = "YOUR-PASSWORD"
+username = os.environ["EARTHDATA_USER"] #"YOUR-USERNAME"
+password = input("Enter EarthData password: ") #"YOUR-PASSWORD"
 
 os.chdir(os.path.dirname(__file__))
 
 # Output stored under ROOT_PATH/raw/
-ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
+#ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
+ROOT_PATH = "data"
 os.makedirs(ROOT_PATH, exist_ok=True)
 
 '''
@@ -70,7 +64,7 @@ def download_smap_automatically(year=None, month=None, day=None, n_days_before=2
 
         print(filename + ' downloaded')
         print('Downloading SMAP data for: ' + str(year) + '-' + str(month).zfill(2) + '-' + str(day).zfill(2))
-    load_file_h5()
+    #load_file_h5()
 
 def list_all_bands_in_h5_file(file_path):
     def list_datasets(name, obj):
@@ -83,13 +77,20 @@ def list_all_bands_in_h5_file(file_path):
 
 
 def create_geotiff(data, output_file):
-    driver = gdal.GetDriverByName('GTiff')
-    dataset = driver.Create(output_file, data.shape[1], data.shape[0], 1, gdal.GDT_Float32)
-    dataset.GetRasterBand(1).WriteArray(data)
-    geotransform = (-180.00, 0.373443973830433, 0, 85.0445, 0, -0.373443973830433)
-    dataset.SetGeoTransform(geotransform)
-    dataset.SetProjection("EPSG:4326")
-    dataset = None
+    src_crs = CRS.from_epsg(6933) # EASE-Grid 2.0 Global
+    dst_crs = CRS.from_epsg(3857) # WGS 84 / Pseudo-Mercator
+    transform = calculate_default_transform(
+        src_crs, dst_crs, data.shape[1], data.shape[0], 
+    )
+    with rasterio.open(output_file, 'w', driver='GTiff', width=data.shape[1], height=data.shape[0], count=1, crs=crs, ) as dataset:
+        #driver = gdal.GetDriverByName('GTiff')
+        #dataset = driver.Create(output_file, data.shape[1], data.shape[0], 1, gdal.GDT_Float32)
+        #dataset.GetRasterBand(1).WriteArray(data)
+        #geotransform = (-180.00, 0.373443973830433, 0, 85.0445, 0, -0.373443973830433)
+        #dataset.SetGeoTransform(geotransform)
+        #dataset.SetProjection("EPSG:4326")
+        #dataset = None
+        dataset.write(data, 1)
 
 
 def load_file_h5():
@@ -121,23 +122,26 @@ def load_file_h5():
 
             else:
                 print('No soil moisture band found for: ', f)
-        os.remove(file_path + f)
+        #os.remove(file_path + f)
 
 
 def chop_in_quadhash():
     quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith("quadshape_3_"))
-    quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
+    #quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
+    #tiles = mercantile.tiles(-180, -85, 180, 85, [3], True)
+    tiles = mercantile.tiles(-125, 24, -66, 50, [3], True)
 
     in_path = ROOT_PATH + "/raw/"
     out_path = ROOT_PATH + "/split_3/"
     os.makedirs(out_path, exist_ok=True)
 
     count = 0
-    for ind, row in quadhashes.iterrows():
+    for tile in tiles:
         count += 1
-        poly, qua = row["geometry"], row["Quadkey"]
-        os.makedirs(out_path + qua, exist_ok=True)
-        bounds = list(poly.exterior.coords)
+        quadkey = mercantile.quadkey(tile)
+        os.makedirs(out_path + quadkey, exist_ok=True)
+        bounds = mercantile.bounds(quadkey)
+
         window = (bounds[0][0], bounds[0][1], bounds[2][0], bounds[2][1])
         for f in os.listdir(in_path):
             gdal.Translate(out_path + qua + '/' + f, in_path + f, projWin=window)
@@ -163,6 +167,6 @@ def remove_empty_folders():
 if __name__ == '__main__':
     # Provide either year,mm,dd or number of days to look back
     # Remove for loop below if want one day prediction
-    for i in range(2,50):
+    for i in range(2,3): #(2,50)
         download_smap_automatically(year=None, month='04', day='04', n_days_before=i)
-    chop_in_quadhash()
+    #chop_in_quadhash()
