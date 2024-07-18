@@ -125,7 +125,7 @@ def load_file_h5():
     am_dataset_name = "Soil_Moisture_Retrieval_Data_AM/soil_moisture"
     pm_dataset_name = "Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm"
 
-    for f in os.listdir(file_path):
+    for f in sorted(os.listdir(file_path)):
         if not f.endswith(".h5"):
             continue
 
@@ -221,7 +221,7 @@ def chop_in_quadhash():
     os.makedirs(out_path, exist_ok=True)
 
     count = 0
-    for f in os.listdir(in_path):
+    for f in sorted(os.listdir(in_path)):
         if not f.endswith(".tif"):
             continue
         print("Creating tiles for", f)
