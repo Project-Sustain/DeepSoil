@@ -7,7 +7,7 @@ import affine
 from rasterio.crs import CRS
 from rasterio.warp import Resampling, reproject, calculate_default_transform
 import h5py
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import requests
 
 os.chdir(os.path.dirname(__file__))
@@ -32,18 +32,16 @@ os.makedirs(ROOT_PATH, exist_ok=True)
     The download path changes every year (majorly the product version of the product)
 """
 
+def download_smap_from_day(year=None, month=None, day=None, n_days_before=2):
+    current_date = datetime.now()
+    download_smap_automatically(current_date - timedelta(days=n_days_before))
 
-def download_smap_automatically(year=None, month=None, day=None, n_days_before=2):
+
+def download_smap_automatically(download_date: date):
     username = os.environ["EARTHDATA_USER"]
     password = os.environ["EARTHDATA_PASS"]
 
-    if year is None or month is None or day is None:
-        current_date = datetime.now()
-        year, month, day = (
-            (current_date - timedelta(days=n_days_before))
-            .strftime("%Y-%m-%d")
-            .split("-")
-        )
+    year, month, day = download_date.strftime("%Y-%m-%d").split("-")
 
     out_dir = RAW_PATH
     os.makedirs(out_dir, exist_ok=True)
@@ -289,10 +287,14 @@ def remove_empty_folders():
 
 
 if __name__ == "__main__":
-    # Provide either year,mm,dd or number of days to look back
-    # Remove for loop below if want one day prediction
-    #for i in range(2, 3):  # (2,50)
-    #    download_smap_automatically(year=None, month="04", day="04", n_days_before=i)
+    start_date = date(2024, 5, 19)
+    end_date = date(2024, 6, 19)
+
+    download_date = start_date
+    while download_date <= end_date:
+        download_smap_automatically(download_date)
+        download_date += timedelta(days=1)
+
     load_file_h5()
 
     chop_in_quadhash()
