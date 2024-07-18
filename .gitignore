@@ -3,3 +3,4 @@ venv/
 log_*.out
 ds_model_*.sh
 credentials.sh
+/data/
