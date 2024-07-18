@@ -16,8 +16,8 @@ ZOOM = 3
 TILE_SIZE = 128
 RESAMPLING = Resampling.bilinear
 # Output stored under ROOT_PATH/raw/
-# ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
-ROOT_PATH = "data"
+ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
+#ROOT_PATH = "data"
 RAW_PATH = ROOT_PATH + "/raw/"
 
 COMPRESS_OPTS = {
@@ -218,8 +218,6 @@ def chop_in_quadhash():
     # quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith(f"quadshape_{ZOOM}_"))
     # quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
     # tiles = mercantile.tiles(-180, -85, 180, 85, [3], True)
-    tiles = mercantile.tiles(-125, 24, -66, 50, [ZOOM], True)
-
     in_path = ROOT_PATH + "/raw/"
     out_path = ROOT_PATH + f"/split_{ZOOM}/"
     os.makedirs(out_path, exist_ok=True)
@@ -233,7 +231,7 @@ def chop_in_quadhash():
             map_data = in_file.read(1)
             map_transform = in_file.get_transform()
 
-            for tile in tiles:
+            for tile in mercantile.tiles(-125, 24, -66, 50, [ZOOM], True):
                 count += 1
                 quadkey = mercantile.quadkey(tile)
 
@@ -293,8 +291,8 @@ def remove_empty_folders():
 if __name__ == "__main__":
     # Provide either year,mm,dd or number of days to look back
     # Remove for loop below if want one day prediction
-    for i in range(2, 3):  # (2,50)
-        download_smap_automatically(year=None, month="04", day="04", n_days_before=i)
+    #for i in range(2, 3):  # (2,50)
+    #    download_smap_automatically(year=None, month="04", day="04", n_days_before=i)
     load_file_h5()
 
     chop_in_quadhash()
