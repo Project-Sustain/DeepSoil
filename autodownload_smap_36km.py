@@ -274,18 +274,6 @@ def slice_tile(map_data: np.ndarray, tile: mercantile.Tile) -> np.ndarray:
     ]
 
 
-def remove_empty_folders():
-    in_path = ROOT_PATH + "/split_3/"
-    tot = len(os.listdir(in_path))
-    count = 0
-    for q in os.listdir(in_path):
-        if len(os.listdir(in_path + q)) == 0:
-            print("No files in :", q)
-            count += 1
-            os.rmdir(in_path + q)
-    print(count, "/", tot)
-
-
 if __name__ == "__main__":
     start_date = date(2024, 5, 19)
     end_date = date(2024, 6, 19)
