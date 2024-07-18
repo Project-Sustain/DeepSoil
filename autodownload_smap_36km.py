@@ -10,9 +10,6 @@ import h5py
 from datetime import datetime, timedelta
 import requests
 
-username = os.environ["EARTHDATA_USER"]
-password = os.environ["EARTHDATA_PASS"]
-
 os.chdir(os.path.dirname(__file__))
 
 ZOOM = 3
@@ -37,6 +34,9 @@ os.makedirs(ROOT_PATH, exist_ok=True)
 
 
 def download_smap_automatically(year=None, month=None, day=None, n_days_before=2):
+    username = os.environ["EARTHDATA_USER"]
+    password = os.environ["EARTHDATA_PASS"]
+
     if year is None or month is None or day is None:
         current_date = datetime.now()
         year, month, day = (
@@ -122,6 +122,41 @@ def list_all_bands_in_h5_file(file_path):
         file.visititems(list_datasets)
 
 
+def load_file_h5():
+    file_path = RAW_PATH
+    am_dataset_name = "Soil_Moisture_Retrieval_Data_AM/soil_moisture"
+    pm_dataset_name = "Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm"
+
+    for f in os.listdir(file_path):
+        if not f.endswith(".h5"):
+            continue
+
+        print("Converting", f, "to TIFF")
+
+        with h5py.File(file_path + f, "r") as file:
+            map_data = None
+
+            if am_dataset_name in file and pm_dataset_name in file:
+                am_data = file[am_dataset_name][()]
+                pm_data = file[pm_dataset_name][()]
+
+                merged_data = am_data.copy()
+                merged_data[am_data == -9999.0] = pm_data[am_data == -9999.0]
+                map_data = merged_data
+
+            elif am_dataset_name in file:
+                map_data = file[am_dataset_name][()]
+            elif pm_dataset_name in file:
+                map_data = file[pm_dataset_name][()]
+
+            if map_data is not None:
+                output_file = f"{file_path}{f.split('_')[4]}.tif"
+                create_geotiff(map_data, output_file)
+            else:
+                print("No soil moisture band found for: ", f)
+        # os.remove(file_path + f)
+
+
 def create_geotiff(data, output_file):
     src_crs = CRS.from_epsg(6933)  # EASE-Grid 2.0 Global
     dst_crs = CRS.from_epsg(3857)  # WGS 84 / Pseudo-Mercator
@@ -179,39 +214,6 @@ def create_geotiff(data, output_file):
             src_nodata=nodata,
         )
 
-
-def load_file_h5():
-    file_path = RAW_PATH
-    am_dataset_name = "Soil_Moisture_Retrieval_Data_AM/soil_moisture"
-    pm_dataset_name = "Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm"
-
-    for f in os.listdir(file_path):
-        if not f.endswith(".h5"):
-            continue
-        with h5py.File(file_path + f, "r") as file:
-            map_data = None
-
-            if am_dataset_name in file and pm_dataset_name in file:
-                am_data = file[am_dataset_name][()]
-                pm_data = file[pm_dataset_name][()]
-
-                merged_data = am_data.copy()
-                merged_data[am_data == -9999.0] = pm_data[am_data == -9999.0]
-                map_data = merged_data
-
-            elif am_dataset_name in file:
-                map_data = file[am_dataset_name][()]
-            elif pm_dataset_name in file:
-                map_data = file[pm_dataset_name][()]
-
-            if map_data is not None:
-                output_file = f"{file_path}{f.split('_')[4]}.tif"
-                create_geotiff(map_data, output_file)
-            else:
-                print("No soil moisture band found for: ", f)
-        # os.remove(file_path + f)
-
-
 def chop_in_quadhash():
     # quadhash_dir = next(d for d in os.listdir() if os.path.isdir(d) and d.startswith(f"quadshape_{ZOOM}_"))
     # quadhashes = gpd.read_file(os.path.join(quadhash_dir, 'quadhash.shp'))
@@ -226,7 +228,7 @@ def chop_in_quadhash():
     for f in os.listdir(in_path):
         if not f.endswith(".tif"):
             continue
-
+        print("Creating tiles for", f)
         with rasterio.open(in_path + f, "r") as in_file:
             map_data = in_file.read(1)
             map_transform = in_file.get_transform()
