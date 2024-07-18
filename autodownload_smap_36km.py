@@ -1,7 +1,6 @@
 import socket
 import numpy as np
 import os
-import geopandas as gpd
 import mercantile
 import rasterio
 import affine
