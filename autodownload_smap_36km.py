@@ -21,6 +21,7 @@ RESAMPLING = Resampling.bilinear
 # Output stored under ROOT_PATH/raw/
 # ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
 ROOT_PATH = "data"
+RAW_PATH = ROOT_PATH + "/raw/"
 
 COMPRESS_OPTS = {
     "COMPRESS": "ZSTD",
@@ -44,7 +45,7 @@ def download_smap_automatically(year=None, month=None, day=None, n_days_before=2
             .split("-")
         )
 
-    out_dir = ROOT_PATH + "/raw/"
+    out_dir = RAW_PATH
     os.makedirs(out_dir, exist_ok=True)
 
     filename_v1 = get_filename(year, month, day, "001")
@@ -180,7 +181,7 @@ def create_geotiff(data, output_file):
 
 
 def load_file_h5():
-    file_path = ROOT_PATH + "/raw/"
+    file_path = RAW_PATH
     am_dataset_name = "Soil_Moisture_Retrieval_Data_AM/soil_moisture"
     pm_dataset_name = "Soil_Moisture_Retrieval_Data_PM/soil_moisture_pm"
 
