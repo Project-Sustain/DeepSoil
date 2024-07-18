@@ -22,6 +22,12 @@ RESAMPLING = Resampling.bilinear
 # Output stored under ROOT_PATH/raw/
 # ROOT_PATH = "/s/" + socket.gethostname() + "/b/nobackup/galileo/sm_predictions/daily_predictions/input_datasets/smap_36"
 ROOT_PATH = "data"
+
+COMPRESS_OPTS = {
+    "COMPRESS": "ZSTD",
+    "PREDICTOR": 3
+}
+
 os.makedirs(ROOT_PATH, exist_ok=True)
 
 """
@@ -149,18 +155,19 @@ def create_geotiff(data, output_file):
 
     nodata = -9999.0
 
-    with rasterio.open(
-        output_file,
-        "w",
-        driver="GTiff",
-        width=width,
-        height=height,
-        count=1,
-        crs=dst_crs,
-        transform=transform,
-        dtype=data.dtype,
-        nodata=nodata,
-    ) as dataset:
+    profile = {
+        "driver": "GTiff",
+        "width": width,
+        "height": height,
+        "count": 1,
+        "crs": dst_crs,
+        "transform": transform,
+        "dtype": data.dtype,
+        "nodata": nodata,
+        **COMPRESS_OPTS
+    }
+
+    with rasterio.open(output_file, "w", **profile) as dataset:
         reproject(
             source=data,
             destination=rasterio.band(dataset, 1),
@@ -222,7 +229,7 @@ def chop_in_quadhash():
 
         with rasterio.open(in_path + f, "r") as in_file:
             map_data = in_file.read(1)
-            map_transform = map_data.get_transform()
+            map_transform = in_file.get_transform()
 
             for tile in tiles:
                 count += 1
@@ -233,28 +240,32 @@ def chop_in_quadhash():
                     continue
 
                 os.makedirs(out_path + quadkey, exist_ok=True)
-                bounds = mercantile.bounds(tile)
                 xy_bounds = mercantile.xy_bounds(tile)
 
                 out_filename = out_path + quadkey + "/" + f
 
                 dst_transform = affine.Affine.from_gdal(
-                    xy_bounds.left, map_transform[1], map_transform[2],
-                    xy_bounds.top, map_transform[4], map_transform[5]
+                    xy_bounds.left,
+                    map_transform[1],
+                    map_transform[2],
+                    xy_bounds.top,
+                    map_transform[4],
+                    map_transform[5],
                 )
 
                 profile = {
-                    'driver': 'GTiff',
-                    'width': TILE_SIZE,
-                    'height': TILE_SIZE,
-                    'count': 1,
-                    'crs': in_file.crs,
-                    'transform': dst_transform,
-                    'dtype': in_file.dtype,
-                    'nodata': in_file.nodata
-                } 
+                    "driver": "GTiff",
+                    "width": TILE_SIZE,
+                    "height": TILE_SIZE,
+                    "count": 1,
+                    "crs": in_file.crs,
+                    "transform": dst_transform,
+                    "dtype": in_file.dtypes[0],
+                    "nodata": in_file.nodata,
+                    **COMPRESS_OPTS
+                }
 
-                with rasterio.open(out_filename, 'w', **profile) as out_file:
+                with rasterio.open(out_filename, "w", **profile) as out_file:
                     out_file.write_band(1, tile_data)
 
 
