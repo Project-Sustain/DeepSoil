@@ -32,12 +32,12 @@ os.makedirs(ROOT_PATH, exist_ok=True)
     The download path changes every year (majorly the product version of the product)
 """
 
-def download_smap_from_day(year=None, month=None, day=None, n_days_before=2):
+def download_smap_automatically(n_days_before=2):
     current_date = datetime.now()
-    download_smap_automatically(current_date - timedelta(days=n_days_before))
+    download_smap_from_date(current_date - timedelta(days=n_days_before))
 
 
-def download_smap_automatically(download_date: date):
+def download_smap_from_date(download_date: date):
     username = os.environ["EARTHDATA_USER"]
     password = os.environ["EARTHDATA_PASS"]
 
@@ -280,7 +280,7 @@ if __name__ == "__main__":
 
     download_date = start_date
     while download_date <= end_date:
-        download_smap_automatically(download_date)
+        download_smap_from_date(download_date)
         download_date += timedelta(days=1)
 
     load_file_h5()
